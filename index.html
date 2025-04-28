@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cubical Marching Squares - WebGL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #121212; color: #e0e0e0;
+            font-family: 'Roboto Mono', monospace;
+        }
+        #container {
+            display: flex; height: 100vh;
+        }
+        #canvas-container {
+            flex: 1; position: relative;
+        }
+        #canvas {
+            width: 100%; height: 100%; display: block;
+        }
+
+        /* --- Info Panel --- */
+        #info-panel, #controls {
+            box-sizing: border-box;
+        }
+        #info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right:auto;
+            background: rgba(20, 20, 30, 0.85);
+            border: 1px solid rgba(100,149,237,0.6);
+            border-radius: 20px;
+            padding: 0;
+            color: #a0e0ff;
+            font-family: 'Roboto Mono', monospace;
+            max-width: 400px;
+            box-shadow: 0 0 15px rgba(100,149,237,0.3);
+            transform: translateY(0);
+            transition: transform 0.4s cubic-bezier(.25,.8,.25,1), opacity 0.3s;
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            overflow: hidden;
+        }
+        @media (max-width: 500px) {
+            #info-panel {
+                left: 20px;
+                right: 20px;
+                max-width: none;
+                width: auto;
+            }
+        }
+        #info-panel.collapsed {
+            transform: translateY(calc(-100% - 20px));
+            opacity: 0;
+            pointer-events: none;
+        }
+        #info-panel-header {
+            background: linear-gradient(to bottom, rgba(20, 20, 30, 0.95) 0%, rgba(20, 20, 30, 0.7) 100%);
+            position: relative;
+            cursor: pointer;
+            padding: 15px;
+            border-bottom: 1px solid rgba(100,149,237,0.3);
+            text-align: right;
+        }
+        #info-panel-header::before {
+            content: "";
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.25; pointer-events: none; z-index: 0;
+            background-image: repeating-linear-gradient(
+                135deg,
+                rgba(100,149,237,0.35) 0px,
+                rgba(100,149,237,0.35) 2px,
+                transparent 2px,
+                transparent 8px
+            );
+            background-size: 12px 12px;
+            animation: bars-info 1s linear infinite;
+        }
+        @keyframes bars-info {
+            from { background-position: 0 0; }
+            to { background-position: 0 -12px; }
+        }
+        #info-panel-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64c8ff;
+            position: relative;
+            z-index: 1;
+        }
+        #info-content {
+            padding: 0 15px 15px 15px;
+            overflow-y: auto;
+            max-height: calc(100vh - 110px);
+            transition: max-height 0.3s;
+        }
+        #info-panel.collapsed #info-content {
+            max-height: 0;
+            padding-bottom: 0;
+        }
+        #info-open-fab {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(100,149,237,0.5);
+            box-shadow: 0 0 10px rgba(100,149,237,0.2);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 101;
+            transition: all 0.3s ease;
+        }
+        #info-open-fab:hover {
+            background: rgba(40, 40, 60, 0.95);
+            box-shadow: 0 0 15px rgba(100,149,237,0.4);
+        }
+        #info-open-fab::before {
+            content: "i";
+            font-family: 'Times New Roman', serif;
+            font-style: italic;
+            font-weight: bold;
+            font-size: 24px;
+            color: #64c8ff;
+        }
+
+        /* --- Controls Panel --- */
+        #controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-width: 95vw;
+            background: rgba(20, 20, 30, 0.95);
+            border-radius: 20px;
+            border: 1px solid rgba(100,149,237,0.6);
+            box-shadow: 0 0 15px rgba(100,149,237,0.3);
+            z-index: 200;
+            transition: transform 0.4s cubic-bezier(.25,.8,.25,1), opacity 0.3s;
+            will-change: transform, opacity;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            max-height: calc(100vh - 40px);
+        }
+        #controls.collapsed {
+            transform: translateX(calc(100% + 20px));
+            opacity: 0;
+            pointer-events: none;
+        }
+        .controls-header {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(to right, rgba(20, 20, 30, 0.95) 0%, rgba(20, 20, 30, 0.7) 100%);
+            position: relative;
+            cursor: pointer;
+            padding: 15px;
+            padding-bottom:10px;
+            border-bottom: 1px solid rgba(100,149,237,0.3);
+            background: linear-gradient(to right, rgba(20, 20, 30, 0.95) 0%, rgba(20, 20, 30, 0.7) 100%);
+        }
+        #controls-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64c8ff;
+            position: relative;
+            z-index: 1;
+            flex: 0 1 auto;
+            text-align: left;
+        }
+        #generate-btn {
+            flex: 0 1 auto;
+            margin-left: 16px;
+            font-size: 14px;
+        }
+        .controls-header::before {
+            content: "";
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.25; pointer-events: none; z-index: 0;
+            background-image: repeating-linear-gradient(
+                135deg,
+                rgba(100,149,237,0.35) 0px,
+                rgba(100,149,237,0.35) 2px,
+                transparent 2px,
+                transparent 8px
+            );
+            background-size: 12px 12px;
+            animation: bars-controls 1s linear infinite;
+        }
+        @keyframes bars-controls {
+            from { background-position: 0 0; }
+            to { background-position: 12px 0; }
+        }
+        #controls-title {
+            user-select: none;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64c8ff;
+            position: relative;
+            z-index: 1;
+        }
+        #controls-content {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 10px 10px 10px 10px;
+        }
+        #controls-open-fab {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(20, 20, 30, 0.95);
+            border: 1px solid rgba(100,149,237,0.5);
+            box-shadow: 0 0 10px rgba(100,149,237,0.2);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 201;
+            transition: all 0.3s ease;
+        }
+        #controls-open-fab:hover {
+            background: rgba(40, 40, 60, 0.95);
+            box-shadow: 0 0 15px rgba(100,149,237,0.4);
+        }
+        @keyframes rotate-gear {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        #controls-open-fab .material-icons {
+            animation: rotate-gear 10s linear infinite;
+            color: #64c8ff;
+        }
+
+        /* --- Controls Content --- */
+        .control-group {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: rgba(30, 30, 40, 0.5);
+            border-radius: 5px;
+            border-left: 3px solid rgba(100,149,237,0.6);
+        }
+        .control-group h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #64c8ff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #a0e0ff;
+        }
+        select, input[type="range"], input[type="text"], input[type="number"] {
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            max-width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+            background-color: rgba(40, 40, 50, 0.8);
+            color: #e0e0e0;
+            border: 1px solid rgba(100,149,237,0.3);
+            border-radius: 4px;
+        }
+        input[type="checkbox"] { margin-right: 8px; }
+        .value-display {
+            float: right;
+            color: #64c8ff;
+            font-family: 'Roboto Mono', monospace;
+        }
+        button:not(#info-open-fab):not(#controls-open-fab) {
+            padding: 8px 12px;
+            background-color: rgba(100,149,237,0.3);
+            color: #a0e0ff;
+            border: 1px solid rgba(100,149,237,0.6);
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            transition: all 0.2s;
+            font-family: 'Roboto Mono', monospace;
+        }
+        button:not(#info-open-fab):not(#controls-open-fab):hover {
+            background-color: rgba(100,149,237,0.5);
+            box-shadow: 0 0 10px rgba(100,149,237,0.3);
+        }
+        button .material-icons {
+            font-size: 1.5em;
+            vertical-align: middle;
+            line-height: 1;
+        }
+        input[type="range"] {
+            height: 8px;
+            background: rgba(40, 40, 50, 0.8);
+            border-radius: 4px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #64c8ff; cursor: pointer;
+            box-shadow: 0 0 5px rgba(100,149,237,0.5);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px; height: 16px; border-radius: 50%;
+            background: #64c8ff; cursor: pointer;
+            box-shadow: 0 0 5px rgba(100,149,237,0.5);
+        }
+        input[type="checkbox"] {
+            width: 16px; height: 16px;
+            background: rgba(40, 40, 50, 0.8);
+            border: 1px solid rgba(100,149,237,0.3);
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            vertical-align: middle;
+        }
+        input[type="checkbox"]:checked {
+            background: rgba(100,149,237,0.5);
+        }
+        input[type="checkbox"]:checked:after {
+            content: '✓'; color: #fff;
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 30, 40, 0.5);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100,149,237,0.3);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100,149,237,0.5);
+        }
+        .debug-table {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 4px 18px;
+            font-size: 13px;
+            font-family: 'Roboto Mono', monospace;
+            margin-bottom: 10px;
+        }
+        .debug-row {
+            display: contents;
+        }
+        .debug-label {
+            color: #a0e0ff;
+            font-weight: 500;
+            text-align: left;
+        }
+        .debug-value {
+            color: #e0e0e0;
+            text-align: right;
+            font-weight: 400;
+        }
+        .stats {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(20, 20, 30, 0.85);
+            padding: 8px 14px;
+            border-radius: 20px;
+            color: #a0e0ff;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 13px;
+            border: 1px solid rgba(100,149,237,0.3);
+            box-shadow: 0 0 10px rgba(100,149,237,0.2);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: auto auto;
+            gap: 2px 16px;
+        }
+        .stats-label {
+            color: #64c8ff;
+            font-weight: 500;
+            text-align: left;
+        }
+        .stats-value {
+            color: #e0e0e0;
+            text-align: right;
+            font-weight: 400;
+        }
+        .loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #64c8ff;
+            text-shadow: 0 0 10px rgba(100,149,237,0.5);
+            background-color: rgba(20, 20, 30, 0.85);
+            border: 1px solid rgba(100,149,237,0.6);
+            border-radius: 8px;
+            padding: 20px 30px;
+            display: flex; align-items: center;
+            animation: pulse 1.5s infinite;
+        }
+        .loading .material-icons {
+            margin-right: 10px;
+            animation: spin 2s linear infinite;
+        }
+        #generate-btn.pending {
+            background: #ff9800 !important;
+            border-color: #ffc8a0 !important;
+            color: #fff;
+        }
+        #generate-btn.generating {
+            border-color: #e2708e !important;
+            color: #fff;
+            animation: pulse-neon-bg 1.1s infinite alternate;
+        }
+        @keyframes pulse-neon-bg {
+            0% { background: #ff1744; box-shadow: 0 0 10px #ff1744, 0 0 1px #ff1744; }
+            100% { background: #ff3b6e; box-shadow: 0 0 30px #ff1744, 0 0 8px #ff1744; }
+        }
+        #generate-btn .material-icons.rotating {
+            animation: rotate-arrow 0.9s linear infinite;
+        }
+        @keyframes rotate-arrow {
+            100% { transform: rotate(360deg); }
+        }
+        .input-pending {
+            border-color: #ff9800 !important;
+            box-shadow: 0 0 5px #ff9800;
+        }
+        .input-default {
+            border-color: #64c8ff !important;
+            box-shadow: none;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg);}
+            100% { transform: rotate(360deg);}
+        }
+        #info-panel a {
+            color: #ff9800; /* Neon orange */
+            text-shadow: 0 0 6px #ff9800, 0 0 2px #fff2;
+            font-weight: bold;
+            text-decoration: none;
+            border-bottom: 1.5px solid #ff9800;
+            transition: color 0.15s, border-bottom 0.15s;
+            background: linear-gradient(90deg, #ff980044 0%, #ff980000 100%);
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        #info-panel a:hover, #info-panel a:focus {
+            color: #fffbe6;
+            border-bottom: 2px solid #fffbe6;
+            background: linear-gradient(90deg, #ff9800cc 0%, #ff980022 100%);
+            text-shadow: 0 0 12px #ff9800, 0 0 4px #fff8;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+            <div id="loading" class="loading" style="display:none;">
+                <span class="material-icons">refresh</span>
+                Processing Surface...
+            </div>
+            <div id="info-panel" class="collapsed">
+                <div id="info-panel-header">
+                    <div id="info-panel-title">Algorithm Info</div>
+                </div>
+                <div id="info-content">
+                    <p>
+                        This is an interactive WebGL demo of the <b>Cubical Marching Squares (CMS)</b> algorithm for adaptive isosurface extraction.
+                    </p>
+                    <p>
+                        <b>Algorithm credits:</b><br>
+                        The original CMS algorithm was proposed by Ho et al. in 2005:<br>
+                        <a href="https://www.csie.ntu.edu.tw/~cyy/publications/papers/Ho2005CMS.pdf" target="_blank">
+                            Cubical Marching Squares: Adaptive Feature Preserving Surface Extraction from Volume Data (Ho et al., 2005, EG)
+                        </a>
+                    </p>
+                    <p>
+                        <b>Code credits:</b><br>
+                        This app is a loose, partial JavaScript/WebGL translation of the original C++ implementation by George Rassovsky:<br>
+                        <a href="https://grassovsky.wordpress.com/2014/09/09/cubical-marching-squares-implementation/" target="_blank">
+                            GC Rassovsky's CMS C++ Implementation (Blog)
+                        </a><br><br>
+                        <a href="https://bitbucket.org/GRassovsky/cubical-marching-squares" target="_blank">
+                            Direct link to the original code (Bitbucket)
+                        </a><br><br>
+                        <a href="https://grassovsky.wordpress.com/wp-content/uploads/2014/09/thesis1.pdf" target="_blank">
+                            Thesis PDF
+                        </a>
+                    </p>
+                    <p>
+                        This translation is not a full, line-by-line port, but rather a partial and adapted implementation for educational and visualization purposes.<br>
+                        Some algorithmic details, optimizations, and features may differ from both the original paper and the reference C++ code.
+                    </p>
+                    <p>
+                        <i>If you use this app or code for research or derivative work, please cite the original paper and the reference implementation.</i>
+                    </p>
+                    <div id="debug-info"></div>
+                </div>
+            </div>
+            <button id="info-open-fab" aria-label="Open info"></button>
+            <div id="stats" class="stats"></div>
+        </div>
+        <div id="controls">
+            <div class="controls-header" id="controls-header">
+                <span id="controls-title">Settings</span>
+                <button id="generate-btn">
+                    <span class="material-icons">refresh</span> Re-Generate
+                </button>
+            </div>
+            <div id="controls-content">
+                <div class="control-group">
+                    <h3>Isosurface</h3>
+                    <label for="function-select">Function:</label>
+                    <select id="function-select">
+                        <option value="sphere">Sphere</option>
+                        <option value="torus">Torus</option>
+                        <option value="cube">Cube</option>
+                        <option value="terrain">Terrain</option>
+                        <option value="gyroid">Gyroid</option>
+                        <option value="doubleTorus">Double Torus</option>
+                    </select>
+                    <label>
+                        <input type="checkbox" id="snap-centroid">
+                        Snap Centroid
+                    </label>
+                    <label for="zero-approx">
+                        Zero Approximation:
+                        <span id="zero-approx-value" class="value-display">2</span>
+                    </label>
+                    <input type="range" id="zero-approx" min="0" max="5" step="1" value="2">
+                </div>
+                <div class="control-group">
+                    <h3>Octree Parameters</h3>
+                    <label for="min-level">
+                        Min Level:
+                        <span id="min-level-value" class="value-display">2</span>
+                    </label>
+                    <input type="range" id="min-level" min="2" max="5" step="1" value="2">
+                    <label for="max-level">
+                        Max Level:
+                        <span id="max-level-value" class="value-display">6</span>
+                    </label>
+                    <input type="range" id="max-level" min="3" max="7" step="1" value="5">
+                    <label for="complex-threshold">
+                        Complex Surface Threshold:
+                        <span id="complex-threshold-value" class="value-display">0.60</span>
+                    </label>
+                    <input type="range" id="complex-threshold" min="0" max="1" step="0.01" value="0.6">
+                </div>
+                <div class="control-group">
+                    <h3>Rendering</h3>
+                    <label>
+                        <input type="checkbox" id="show-wireframe" checked>
+                        Show Wireframe
+                    </label>
+                    <label>
+                        <input type="checkbox" id="show-normals" checked>
+                        Show Normals
+                    </label>
+                    <label>
+                        <input type="checkbox" id="show-octree" checked>
+                        Show Octree
+                    </label>
+                    <label>
+                        <input type="checkbox" id="enable-backface-culling" checked>
+                        Enable Backface Culling
+                    </label>
+                    <label>
+                        <input type="checkbox" id="enable-texturing" checked>
+                        Enable Texturing
+                    </label>
+                </div>
+                <div class="control-group">
+                    <button id="reset-camera-btn">
+                        <span class="material-icons">videocam</span> Reset Camera
+                    </button>
+                    <button id="export-obj-btn">
+                        <span class="material-icons">file_download</span> Export OBJ
+                    </button>
+                </div>
+            </div>
+        </div>
+        <button id="controls-open-fab" aria-label="Open controls">
+            <span class="material-icons">settings</span>
+        </button>
+    </div>
+    <!-- Load libraries and your app code as before -->
+    <script src="js/gl-matrix.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/types.js"></script>
+    <script src="js/isosurface.js"></script>
+    <script src="js/array3d.js"></script>
+    <script src="js/octree.js"></script>
+    <script src="js/algcms.js"></script>
+    <script src="js/mesh.js"></script>
+    <script src="js/renderer.js"></script>
+    <script src="js/camera.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/main.js"></script>
+    <!-- UI Enhancement -->
+    <script>
+    // UI Enhancement Script for CMS App
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Info Panel Logic ---
+        const infoPanel = document.getElementById('info-panel');
+        const infoPanelHeader = document.getElementById('info-panel-header');
+        const infoOpenFab = document.getElementById('info-open-fab');
+
+        function toggleInfoPanel() {
+            if (infoPanel.classList.contains('collapsed')) {
+                infoPanel.classList.remove('collapsed');
+                infoOpenFab.style.display = 'none';
+            } else {
+                infoPanel.classList.add('collapsed');
+                infoOpenFab.style.display = 'flex';
+            }
+        }
+
+        infoPanelHeader.onclick = toggleInfoPanel;
+        infoOpenFab.onclick = (e) => {
+            e.stopPropagation();
+            toggleInfoPanel();
+        };
+
+        // --- Controls Panel Logic ---
+        const controlsPanel = document.getElementById('controls');
+        const controlsHeader = document.getElementById('controls-header');
+        const controlsOpenFab = document.getElementById('controls-open-fab');
+
+        function toggleControlsPanel() {
+            if (controlsPanel.classList.contains('collapsed')) {
+                controlsPanel.classList.remove('collapsed');
+                controlsOpenFab.style.display = 'none';
+            } else {
+                controlsPanel.classList.add('collapsed');
+                controlsOpenFab.style.display = 'flex';
+            }
+        }
+
+        controlsHeader.onclick = toggleControlsPanel;
+        controlsOpenFab.onclick = (e) => {
+            e.stopPropagation();
+            toggleControlsPanel();
+        };
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                controlsPanel.classList.add('collapsed');
+                controlsOpenFab.style.display = 'flex';
+            }
+        });
+
+        // --- Info Panel Debug Info ---
+        const debugInfo = document.getElementById('debug-info');
+        window.updateDebugInfo = function(info) {
+            if (!info) return;
+            let html = '<div class="debug-section">';
+            // Algorithm Stats Table
+            if (info.algorithm) {
+                html += '<h4 style="color:#64c8ff; margin-bottom:8px;">Algorithm Stats</h4>';
+                html += '<div class="debug-table">';
+                for (const [key, value] of Object.entries(info.algorithm)) {
+                    html += `<div class="debug-row">
+                        <span class="debug-label">${key}:</span>
+                        <span class="debug-value">${value}</span>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+            // Performance Table
+            if (info.performance) {
+                html += '<h4 style="color:#64c8ff; margin-bottom:8px; margin-top:16px;">Performance</h4>';
+                html += '<div class="debug-table">';
+                for (const [key, value] of Object.entries(info.performance)) {
+                    html += `<div class="debug-row">
+                        <span class="debug-label">${key}:</span>
+                        <span class="debug-value">${value}</span>
+                    </div>`;
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+            debugInfo.innerHTML = html;
+        };
+
+        // --- Ensure info panel starts closed and both FABs are visible in their corners ---
+        infoPanel.classList.add('collapsed');
+        infoOpenFab.style.display = 'flex';
+        controlsPanel.classList.remove('collapsed');
+        controlsOpenFab.style.display = 'none';
+    });
+    </script>
+    <script>
+        // Wait for everything to be fully loaded
+        window.addEventListener('load', function() {
+          const infoPanel = document.getElementById('info-panel');
+          const infoOpenFab = document.getElementById('info-open-fab');
+          const controlsPanel = document.getElementById('controls');
+          const controlsOpenFab = document.getElementById('controls-open-fab');
+          const generateBtn = document.getElementById('generate-btn');
+          const canvas = document.getElementById('canvas');
+          
+          // Make sure generate button doesn't close the panel
+          generateBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+          });
+          
+          // Track if we're dragging
+          let isDragging = false;
+          
+          document.addEventListener('mousedown', function(e) {
+            isDragging = false;
+          });
+          
+          document.addEventListener('mousemove', function(e) {
+            if (e.buttons > 0) {
+              isDragging = true;
+            }
+          });
+          
+          // Only close panels on click, not after drag
+          document.addEventListener('mouseup', function(e) {
+            if (isDragging) return; // Don't close if we were dragging
+            
+            // Check if click is outside the controls panel
+            if (!controlsPanel.contains(e.target) && 
+                !controlsOpenFab.contains(e.target)) {
+              controlsPanel.classList.add('collapsed');
+              controlsOpenFab.style.display = 'flex';
+            }
+            
+            // Check if click is outside the info panel
+            if (!infoPanel.contains(e.target) && 
+                !infoOpenFab.contains(e.target)) {
+              infoPanel.classList.add('collapsed');
+              infoOpenFab.style.display = 'flex';
+            }
+          });
+          
+          // Similar logic for touch events
+          let touchStartX, touchStartY;
+          
+          document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 0) {
+              touchStartX = e.touches[0].clientX;
+              touchStartY = e.touches[0].clientY;
+              isDragging = false;
+            }
+          });
+          
+          document.addEventListener('touchmove', function(e) {
+            if (e.touches.length > 0) {
+              const touchX = e.touches[0].clientX;
+              const touchY = e.touches[0].clientY;
+              // If moved more than 10px, consider it a drag
+              if (Math.abs(touchX - touchStartX) > 10 || 
+                  Math.abs(touchY - touchStartY) > 10) {
+                isDragging = true;
+              }
+            }
+          });
+          
+          document.addEventListener('touchend', function(e) {
+            if (isDragging) return; // Don't close if we were dragging
+            
+            // Use the last touch position for checking
+            const touch = e.changedTouches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            // Check if touch ended outside panels
+            if (!controlsPanel.contains(element) && 
+                !controlsOpenFab.contains(element)) {
+              controlsPanel.classList.add('collapsed');
+              controlsOpenFab.style.display = 'flex';
+            }
+            
+            if (!infoPanel.contains(element) && 
+                !infoOpenFab.contains(element)) {
+              infoPanel.classList.add('collapsed');
+              infoOpenFab.style.display = 'flex';
+            }
+          });
+        });
+    </script>
+</body>
+</html>
